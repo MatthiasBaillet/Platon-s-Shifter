@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platon's Shifter v4.1</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #0a0a0a; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: Arial; color: white; }
+        .game-container { text-align: center; max-width: 800px; }
+        canvas { border: 2px solid #00ffff; background: #1a1a2e; display: block; margin: 0 auto; }
+        .main-panel { margin-top: 15px; padding: 10px; background: rgba(0,255,255,0.1); border-radius: 5px; min-height: 50px; }
+        #status { margin-top: 10px; padding: 5px; border-radius: 3px; background: #1a1a2e; color: #00ffff; }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="500"></canvas>
+        <div class="main-panel">
+            <div id="currentForm">FORME: TETRAEDRE</div>
+            <div>Score: <span id="score">0</span></div>
+            <div>Énergie: <span id="energy">0</span></div>
+            <div>Kills: <span id="killsDisplay">0/5 [VERROU]</span></div>
+            <div>Vie: <span id="health">[COEUR][COEUR][COEUR]</span></div>
+            <div id="powerStatus">[CLIC] LASER</div>
+            <div id="powerCooldown" style="width: 100%; height: 5px; background: #333; margin-top: 5px;"></div>
+            <div id="status">Jouez !</div>
+        </div>
+    </div>
+    <script src="Game.js"></script>
+</body>
+</html>

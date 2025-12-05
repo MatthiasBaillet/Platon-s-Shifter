@@ -1,0 +1,14 @@
+{
+  "name": "platons-shifter",
+  "version": "4.3.0",
+  "description": "Jeu d'action-arcade basé sur les solides platoniciens",
+  "main": "Game.js",
+  "scripts": {
+    "test": "node __tests__\\game.test.js",
+    "play": "start index.html"
+  },
+  "keywords": ["jeu", "platon", "arcade"],
+  "author": "Matthias Baillet",
+  "license": "MIT",
+  "devDependencies": {}
+}

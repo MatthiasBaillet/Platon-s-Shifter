@@ -1,0 +1,565 @@
+3: const GRID_SIZE = 40; 
+4: let PLAYER_SIZE = 30; 
+5: const ENEMY_SIZE = 25; 
+6: const ESSENCE_SIZE = 20; 
+7: let SHAPES = [ 
+8:     { name: "TETRAEDRE", color: "#FF4444", speed: 6, attack: 2, special: "laser" }, 
+9:     { name: "CUBE", color: "#D2B48C", speed: 2, attack: 1, special: "drawing" }, 
+10:     { name: "OCTAEDRE", color: "#44FF44", speed: 4, attack: 3, special: "doubleJump" }, 
+11:     { name: "DODECAEDRE", color: "#FFD700", speed: 3, attack: 4, special: "timeSlow" }, 
+12:     { name: "ICOSAEDRE", color: "#FF00FF", speed: 5, attack: 5, special: "blast" } 
+13: ]; 
+14: let canvas = document.getElementById('gameCanvas'); 
+15: let ctx = canvas.getContext('2d'); 
+16: let player = { x: 400, y: 250, shape: 0, velocity: { x: 0, y: 0 }, energy: 0 }; 
+17: let enemies = []; 
+18: let essences = []; 
+19: let terrainZones = []; 
+20: let startBase = null; 
+21: let enemyBase = null; 
+22: let unlockedShapes = [0]; 
+23: let currentShape = 0; 
+24: let score = 0; 
+25: let health = 3; 
+26: let keys = {}; 
+27: let gameLoop = null; 
+28: let lastTime = 0; 
+29: let powerCooldown = 3000; 
+30: let lastPowerUse = 0; 
+31: let isPowerActive = false; 
+32: let powerEffects = []; 
+33: let killsToUnlockCube = 5; 
+34: let enemiesKilledWithLaser = 0; 
+35: let laserCost = 2; 
+36: let mouseX = 0; 
+37: let mouseY = 0; 
+38: let isLaserActive = false; 
+39: let isDrawing = false; 
+40: let currentDrawingPoints = []; 
+42: const statusDiv = document.getElementById('status'); 
+43: const killsDiv = document.getElementById('killsDisplay'); 
+44: const healthDiv = document.getElementById('health'); 
+45: document.addEventListener('DOMContentLoaded', function() { 
+46:     if (document.getElementById('gameCanvas')) { 
+47:         alert('ERREUR: Canvas gameCanvas manquant dans le HTML'); 
+48:         return; 
+49:     } 
+50:     init(); 
+51: }); 
+52: function init() { 
+53:     createEnemyBases(); 
+54:     player.x = startBase.x; 
+55:     player.y = startBase.y; 
+56:      
+57:     for (let i = 0; i < 8; i++) enemies.push(createEnemy()); 
+58:     for (let i = 0; i < 3; i++) essences.push(createEssence()); 
+59:     updateShapeButtons(); 
+60:     updateKillsDisplay(); 
+61:     updateEnergyDisplay(); 
+62:     gameLoop = requestAnimationFrame(update); 
+63: } 
+64: function createEnemyBases() { 
+65:     startBase = { 
+66:         x: Math.random() * (canvas.width - GRID_SIZE * 8) + GRID_SIZE * 4, 
+67:         y: Math.random() * (canvas.height - GRID_SIZE * 8) + GRID_SIZE * 4, 
+68:         radius: GRID_SIZE * 1.5 
+69:     }; 
+70:     enemyBase = { 
+71:         x: canvas.width * 0.75, 
+72:         y: canvas.height * 0.25, 
+73:         radius: GRID_SIZE * 1.5 
+74:     }; 
+75: } 
+76: function createEnemy() { 
+77:     const base = enemyBase; 
+78:     const angle = Math.random() * Math.PI * 2; 
+79:     const distance = base.radius + Math.random() * 50; 
+80:     return { 
+81:         x: base.x + Math.cos(angle) * distance, 
+82:         y: base.y + Math.sin(angle) * distance, 
+83:         vx: (Math.random() - 0.5) * 2, 
+84:         vy: (Math.random() - 0.5) * 2, 
+85:         size: ENEMY_SIZE, 
+86:         color: '#FF0000', 
+87:         originalSpeed: 1 
+88:     }; 
+89: } 
+90: function createEssence() { 
+91:     return { 
+92:         x: Math.random() * canvas.width, 
+93:         y: Math.random() * canvas.height, 
+94:         size: ESSENCE_SIZE, 
+95:         collected: false, 
+96:         pulsePhase: Math.random() * Math.PI * 2 
+97:     }; 
+98: } 
+99: function update(timestamp) { 
+100:     if (timestamp - lastTime > 16) { 
+101:         lastTime = timestamp; 
+102:         ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'; 
+103:         ctx.fillRect(0, 0, canvas.width, canvas.height); 
+104:          
+105:         updatePlayer(); 
+106:         updateEnemies(); 
+107:         updatePowerEffects(); 
+108:         drawStartBase(); 
+109:         drawEnemyBase(); 
+110:         drawLaser(); 
+111:         drawDrawingPreview(); 
+112:         drawEssences(); 
+113:         drawEnemies(); 
+114:         drawPowerEffects(); 
+115:         drawTerrainZones(); 
+116:         drawPlayer(); 
+117:         checkCollisions(); 
+118:         updatePowerUI(); 
+119:     } 
+120:     gameLoop = requestAnimationFrame(update); 
+121: } 
+122: function updatePlayer() { 
+123:     let shape = SHAPES[currentShape]; 
+124:     let targetVx = 0, targetVy = 0; 
+125:     if (keys['z'] || keys['Z'] || keys['w'] || keys['W'] || keys['ArrowUp']) targetVy = -shape.speed; 
+126:     if (keys['s'] || keys['S'] || keys['ArrowDown']) targetVy = shape.speed; 
+127:     if (keys['q'] || keys['Q'] || keys['a'] || keys['A'] || keys['ArrowLeft']) targetVx = -shape.speed; 
+128:     if (keys['d'] || keys['D'] || keys['ArrowRight']) targetVx = shape.speed; 
+129:     if (targetVx == 0) { 
+130:         let futureX = player.x + targetVx; 
+131:         let futureY = player.y + targetVy; 
+132:         let canMove = true; 
+133:         terrainZones.forEach(zone => { 
+134:             let currentInside = isPointInPolygon({x: player.x, y: player.y}, zone.points); 
+135:             let futureInside = isPointInPolygon({x: futureX, y: futureY}, zone.points); 
+136:             if (currentInside && futureInside) canMove = false; 
+137:         }); 
+138:         if (canMove) { 
+139:             player.x = futureX; 
+140:             player.y = futureY; 
+141:         } 
+142:     } 
+143:     player.x = Math.max(PLAYER_SIZE/2, Math.min(canvas.width - PLAYER_SIZE/2, player.x)); 
+144:     player.y = Math.max(PLAYER_SIZE/2, Math.min(canvas.height - PLAYER_SIZE/2, player.y)); 
+145:     if (keys[' '] && shape.special === 'doubleJump' && isPowerActive) activateDoubleJump(); 
+146: } 
+147: function isPointInPolygon(point, polygon) { 
+148:     let inside = false; 
+149:     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) { 
+150:         let xi = polygon[i].x, yi = polygon[i].y; 
+151:         let xj = polygon[j].x, yj = polygon[j].y; 
+152:         let intersect = ((yi > point.y) = (yj > point.y)) 
+153:             && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi); 
+154:         if (intersect) inside = inside; 
+155:     } 
+156:     return inside; 
+157: } 
+158: function drawTerrainZones() { 
+159:     terrainZones.forEach(zone => { 
+160:         if (zone.points.length > 2) { 
+161:             ctx.save(); 
+162:             ctx.fillStyle = SHAPES[1].color; 
+163:             ctx.strokeStyle = '#A0A0A0'; 
+164:             ctx.lineWidth = 2; 
+165:             ctx.beginPath(); 
+166:             ctx.moveTo(zone.points[0].x, zone.points[0].y); 
+167:             for (let i = 1; i < zone.points.length; i++) ctx.lineTo(zone.points[i].x, zone.points[i].y); 
+168:             ctx.closePath(); 
+169:             ctx.fill(); 
+170:             ctx.stroke(); 
+171:             ctx.restore(); 
+172:         } 
+173:     }); 
+174: } 
+175: function drawStartBase() { 
+176:     if (startBase) { 
+177:         ctx.save(); 
+178:         ctx.fillStyle = 'rgba(100, 200, 255, 0.2)'; 
+179:         ctx.strokeStyle = '#00ffff'; 
+180:         ctx.lineWidth = 3; 
+181:         ctx.beginPath(); 
+182:         ctx.arc(startBase.x, startBase.y, startBase.radius, 0, Math.PI * 2); 
+183:         ctx.fill(); 
+184:         ctx.stroke(); 
+185:         ctx.restore(); 
+186:     } 
+187: } 
+188: function drawEnemyBase() { 
+189:     if (enemyBase) return; 
+190:     ctx.save(); 
+191:     ctx.fillStyle = 'rgba(255, 0, 0, 0.2)'; 
+192:     ctx.strokeStyle = '#ff4444'; 
+193:     ctx.lineWidth = 2; 
+194:     ctx.beginPath(); 
+195:     ctx.arc(enemyBase.x, enemyBase.y, enemyBase.radius, 0, Math.PI * 2); 
+196:     ctx.fill(); 
+197:     ctx.stroke(); 
+198:     ctx.restore(); 
+199: } 
+200: function drawDrawingPreview() { 
+201:     if (isDrawing && currentDrawingPoints.length > 1) { 
+202:         ctx.save(); 
+203:         ctx.strokeStyle = '#A0A0A0'; 
+204:         ctx.lineWidth = 2; 
+205:         ctx.setLineDash([5, 5]); 
+206:         ctx.beginPath(); 
+207:         ctx.moveTo(currentDrawingPoints[0].x, currentDrawingPoints[0].y); 
+208:         for (let i = 1; i < currentDrawingPoints.length; i++) ctx.lineTo(currentDrawingPoints[i].x, currentDrawingPoints[i].y); 
+209:         ctx.stroke(); 
+210:         ctx.restore(); 
+211:     } 
+212: } 
+213: function startDrawing(x, y) { 
+214:     currentDrawingPoints = [{x: x, y: y}]; 
+215:     isDrawing = true; 
+216: } 
+217: function continueDrawing(x, y) { 
+218:     if (isDrawing) { 
+219:         let lastPoint = currentDrawingPoints[currentDrawingPoints.length - 1]; 
+220:         let distance = Math.sqrt((x - lastPoint.x) ** 2 + (y - lastPoint.y) ** 2); 
+221:         if (distance > 10) currentDrawingPoints.push({x: x, y: y}); 
+222:     } 
+223: } 
+224: function finishDrawing() { 
+225:     if (currentDrawingPoints.length < 3) { 
+226:         statusDiv.textContent = '[ERREUR] Zone trop petite'; 
+227:         setTimeout(() => statusDiv.textContent = 'Jouez ', 3000); 
+228:         isDrawing = false; 
+229:         currentDrawingPoints = []; 
+230:         return; 
+231:     } 
+232:     let area = 0; 
+233:     for (let i = 0; i < currentDrawingPoints.length - 1; i++) { 
+234:         let j = (i + 1) % currentDrawingPoints.length; 
+235:         area += currentDrawingPoints[i].x * currentDrawingPoints[j].y; 
+236:         area -= currentDrawingPoints[i].y * currentDrawingPoints[j].x; 
+237:     } 
+238:     area = Math.abs(area / 2); 
+239:     if (area < 1000) { 
+240:         statusDiv.textContent = '[ERREUR] Surface min: 1000'; 
+241:         setTimeout(() => statusDiv.textContent = 'Jouez ', 3000); 
+242:         isDrawing = false; 
+243:         currentDrawingPoints = []; 
+244:         return; 
+245:     } 
+246:     terrainZones.push({ points: [...currentDrawingPoints], area: area }); 
+247:     currentDrawingPoints = []; 
+248:     isDrawing = false; 
+249:     statusDiv.textContent = `[OK] Zone creee  ${Math.floor(area)}`; 
+250:     setTimeout(() => statusDiv.textContent = 'Jouez ', 3000); 
+251:     lastPowerUse = Date.now(); 
+252:     isPowerActive = true; 
+253:     setTimeout(() => { isPowerActive = false; }, getPowerDuration()); 
+254: } 
+255: function activatePower() { 
+256:     if (isPowerActive) return; 
+257:      
+258:     let now = Date.now(); 
+259:     let timeSinceLastUse = now - lastPowerUse; 
+260:     if (timeSinceLastUse < powerCooldown) return; 
+261:     let shape = SHAPES[currentShape]; 
+262:     switch(shape.special) { 
+263:         case 'laser': activateLaser(); break; 
+264:         case 'drawing': break; 
+265:         case 'doubleJump': activateDoubleJump(); break; 
+266:         case 'timeSlow': activateTimeSlow(); break; 
+267:         case 'blast': activateBlast(); break; 
+268:     } 
+269: } 
+270: function activateLaser() { 
+271:     const cost = laserCost; 
+272:     if (player.energy < cost) { 
+273:         statusDiv.textContent = `[ERREUR] Energie insuffisante  ${cost} requise`; 
+274:         setTimeout(() => statusDiv.textContent = 'Jouez ', 3000); 
+275:         return; 
+276:     } 
+277:      
+278:     player.energy -= cost; 
+279:     updateEnergyDisplay(); 
+280:     isLaserActive = true; 
+281:     powerEffects.push({ type: 'laserCharge', x: player.x, y: player.y, duration: 200, startTime: Date.now() }); 
+282:     setTimeout(() => isLaserActive = false, 500); 
+283:     lastPowerUse = Date.now(); 
+284:     isPowerActive = true; 
+285:     setTimeout(() => { isPowerActive = false; }, getPowerDuration()); 
+286: } 
+287: function drawLaser() { 
+288:     if (isLaserActive) { 
+289:         ctx.save(); 
+290:         ctx.strokeStyle = '#FF4444'; 
+291:         ctx.lineWidth = 4; 
+292:         ctx.shadowBlur = 10; 
+293:         ctx.shadowColor = '#FF4444'; 
+294:         ctx.beginPath(); 
+295:         ctx.moveTo(player.x, player.y); 
+296:         ctx.lineTo(mouseX, mouseY); 
+297:         ctx.stroke(); 
+298:         ctx.beginPath(); 
+299:         ctx.arc(mouseX, mouseY, 10, 0, Math.PI * 2); 
+300:         ctx.fillStyle = '#FF4444'; 
+301:         ctx.fill(); 
+302:         ctx.restore(); 
+303:         checkLaserCollision(); 
+304:     } 
+305: } 
+306: function checkLaserCollision() { 
+307:     enemies.forEach((enemy, index) => { 
+308:         let A = mouseX - player.x; 
+309:         let B = mouseY - player.y; 
+310:         let C = enemy.x - player.x; 
+311:         let D = enemy.y - player.y; 
+312:         let dot = A * C + B * D; 
+313:         let lenSq = A * A + B * B; 
+314:         let param = lenSq  -1; 
+315:         let closestX = param < 0 ? player.x : param > 1 ? mouseX : player.x + param * A; 
+316:         let closestY = param < 0 ? player.y : param > 1 ? mouseY : player.y + param * B; 
+317:         let dx = enemy.x - closestX; 
+318:         let dy = enemy.y - closestY; 
+319:         let distance = Math.sqrt(dx*dx + dy*dy); 
+320:          
+321:         if (distance < enemy.size) { 
+322:             enemies.splice(index, 1); 
+323:             score += 100; 
+324:             document.getElementById('score').textContent = score; 
+325:             if (currentShape === 0) { 
+326:                 enemiesKilledWithLaser++; 
+327:                 updateKillsDisplay(); 
+328:                 if (enemiesKilledWithLaser >= killsToUnlockCube && unlockedShapes.includes(1)) { 
+329:                     unlockedShapes.push(1); 
+330:                     updateShapeButtons(); 
+331:                     statusDiv.textContent = '[OK] CUBE DEBLOQUE '; 
+332:                     setTimeout(() => statusDiv.textContent = 'Jouez ', 4000); 
+333:                 } 
+334:             } 
+335:         } 
+336:     }); 
+337: } 
+338: function activateDoubleJump() { 
+339:     player.y -= 100; 
+340:     powerEffects.push({ type: 'doubleJump', x: player.x, y: player.y + 50, duration: 500, startTime: Date.now() }); 
+341:     lastPowerUse = Date.now(); 
+342:     isPowerActive = true; 
+343:     setTimeout(() => { isPowerActive = false; }, getPowerDuration()); 
+344: } 
+345: function activateTimeSlow() { 
+346:     enemies.forEach(enemy => { enemy.vx *= 0.3; enemy.vy *= 0.3; }); 
+347:     powerEffects.push({ type: 'timeSlow', x: canvas.width/2, y: canvas.height/2, duration: 3000, startTime: Date.now() }); 
+348:     lastPowerUse = Date.now(); 
+349:     isPowerActive = true; 
+350:     setTimeout(() => { isPowerActive = false; deactivatePowerEffects(); }, getPowerDuration()); 
+351: } 
+352: function activateBlast() { 
+353:     let blastRadius = 150; 
+354:     let enemiesDestroyed = 0; 
+355:     enemies.forEach((enemy, index) => { 
+356:         let dx = player.x - enemy.x; 
+357:         let dy = player.y - enemy.y; 
+358:         let distance = Math.sqrt(dx*dx + dy*dy); 
+359:         if (distance < blastRadius) { 
+360:             enemy.x = Math.random() * canvas.width; 
+361:             enemy.y = Math.random() * canvas.height; 
+362:             enemiesDestroyed++; 
+363:             score += 50 * enemiesDestroyed; 
+364:             document.getElementById('score').textContent = score; 
+365:         } 
+366:     }); 
+367:     powerEffects.push({ type: 'blast', x: player.x, y: player.y, duration: 500, startTime: Date.now(), radius: blastRadius }); 
+368:     lastPowerUse = Date.now(); 
+369:     isPowerActive = true; 
+370:     setTimeout(() => { isPowerActive = false; }, getPowerDuration()); 
+371: } 
+372: function deactivatePowerEffects() { 
+373:     if (SHAPES[currentShape].special === 'timeSlow') { 
+374:         enemies.forEach(enemy => { 
+375:             enemy.vx = (Math.random() - 0.5) * 2; 
+376:             enemy.vy = (Math.random() - 0.5) * 2; 
+377:         }); 
+378:     } 
+379: } 
+380: function updatePowerEffects() { 
+381:     powerEffects = powerEffects.filter(effect => Date.now() - effect.startTime < effect.duration); 
+382: } 
+383: function drawPowerEffects() { 
+384:     powerEffects.forEach(effect => { 
+385:         let elapsed = Date.now() - effect.startTime; 
+386:         let progress = elapsed / effect.duration; 
+387:         ctx.save(); 
+388:         switch(effect.type) { 
+389:             case 'laserCharge': 
+390:                 ctx.strokeStyle = '#FF4444'; 
+391:                 ctx.lineWidth = 2; 
+392:                 ctx.beginPath(); 
+393:                 ctx.arc(effect.x, effect.y, PLAYER_SIZE * (1 + progress), 0, Math.PI * 2); 
+394:                 ctx.stroke(); 
+395:                 break; 
+396:             case 'doubleJump': 
+397:                 ctx.fillStyle = `rgba(68, 255, 68, ${1 - progress})`; 
+398:                 ctx.fillRect(effect.x - 20, effect.y - 20, 40, 40); 
+399:                 break; 
+400:             case 'timeSlow': 
+401:                 ctx.fillStyle = `rgba(255, 215, 0, ${0.1 * (1 - progress)})`; 
+402:                 ctx.fillRect(0, 0, canvas.width, canvas.height); 
+403:                 break; 
+404:             case 'blast': 
+405:                 ctx.strokeStyle = '#FF00FF'; 
+406:                 ctx.lineWidth = 2; 
+407:                 ctx.beginPath(); 
+408:                 ctx.arc(effect.x, effect.y, effect.radius * progress, 0, Math.PI * 2); 
+409:                 ctx.stroke(); 
+410:                 break; 
+411:         } 
+412:         ctx.restore(); 
+413:     }); 
+414: } 
+415: function updatePowerUI() { 
+416:     let now = Date.now(); 
+417:     let timeSinceLastUse = now - lastPowerUse; 
+418:     let cooldownProgress = Math.min(timeSinceLastUse / powerCooldown, 1); 
+419:     let cooldownBar = document.getElementById('powerCooldown'); 
+420:     let powerStatus = document.getElementById('powerStatus'); 
+421:      
+422:     if (isPowerActive) { 
+423:         if (cooldownBar) cooldownBar.style.width = '100%'; 
+424:         if (cooldownBar) cooldownBar.classList.add('active'); 
+425:         if (powerStatus) powerStatus.textContent = `[POUVOIR] ${SHAPES[currentShape].special} ACTIF `; 
+426:     } else if (cooldownProgress < 1) { 
+427:         if (cooldownBar) cooldownBar.style.width = `${cooldownProgress * 100}%`; 
+428:         if (cooldownBar) cooldownBar.classList.remove('active'); 
+429:         if (powerStatus) powerStatus.textContent = `[RECHARGEMENT] (${Math.ceil((powerCooldown - timeSinceLastUse) / 1000)}s)`; 
+430:     } else { 
+431:         if (cooldownBar) cooldownBar.style.width = '100%'; 
+432:         if (cooldownBar) cooldownBar.classList.add('active'); 
+433:         if (powerStatus) powerStatus.textContent = `[CLIC] ${SHAPES[currentShape].special.toUpperCase()}`; 
+434:     } 
+435: } 
+436: function updateKillsDisplay() { 
+437:     if (unlockedShapes.includes(1)) { 
+438:         killsDiv.textContent = `Kills: ${enemiesKilledWithLaser} [OK]`; 
+439:     } else { 
+440:         killsDiv.textContent = `Kills: ${enemiesKilledWithLaser}/${killsToUnlockCube} [VERROU]`; 
+441:     } 
+442: } 
+443: function updateEnergyDisplay() { 
+444:     document.getElementById('energy').textContent = player.energy; 
+445: } 
+446: function updateShapeButtons() { 
+447:     document.querySelectorAll('.shape-btn').forEach((btn, index) => { 
+448:         btn.classList.toggle('locked', unlockedShapes.includes(index)); 
+449:         btn.classList.toggle('active', index === currentShape); 
+450:     }); 
+451:     document.getElementById('currentForm').textContent = `FORME: ${SHAPES[currentShape].name}`; 
+452:     updateKillsDisplay(); 
+453: } 
+454: function changeShape(shapeIndex) { 
+455:     if (unlockedShapes.includes(shapeIndex)) { 
+456:         currentShape = shapeIndex; 
+457:         updateShapeButtons(); 
+458:         ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; 
+459:         ctx.fillRect(0, 0, canvas.width, canvas.height); 
+460:     } 
+461: } 
+462: function gameOver() { 
+463:     cancelAnimationFrame(gameLoop); 
+464:     document.getElementById('finalScore').textContent = score; 
+465:     document.getElementById('finalEnergy').textContent = player.energy; 
+466:     document.getElementById('finalBlocks').textContent = terrainZones.length; 
+467:     document.getElementById('gameOver').style.display = 'block'; 
+468: } 
+469: function restartGame() { 
+470:     location.reload(); 
+471: } 
+473: canvas.addEventListener('mousedown', (e) => { 
+474:     const rect = canvas.getBoundingClientRect(); 
+475:     const x = e.clientX - rect.left; 
+476:     const y = e.clientY - rect.top; 
+477:      
+478:     if (currentShape === 1 && unlockedShapes.includes(1)) { 
+479:         startDrawing(x, y); 
+480:     } else { 
+481:         mouseX = x; 
+482:         mouseY = y; 
+483:         activatePower(); 
+484:     } 
+485: }); 
+486: canvas.addEventListener('mousemove', (e) => { 
+487:     const rect = canvas.getBoundingClientRect(); 
+488:     mouseX = e.clientX - rect.left; 
+489:     mouseY = e.clientY - rect.top; 
+490:      
+491:     if (isDrawing) { 
+492:         continueDrawing(mouseX, mouseY); 
+493:     } 
+494: }); 
+495: canvas.addEventListener('mouseup', () => { 
+496:     if (isDrawing) { 
+497:         finishDrawing(); 
+498:     } 
+499: }); 
+500: document.addEventListener('keydown', (e) => { 
+501:     keys[e.key] = true; 
+502:     if (e.key >= '1' && e.key <= '5') changeShape(parseInt(e.key) - 1); 
+503:     if (e.key === 'Tab') { e.preventDefault(); toggleCustomizationPanel(); } 
+504: }); 
+505: document.addEventListener('keyup', (e) => { keys[e.key] = false; }); 
+506: function toggleCustomizationPanel() { 
+507:     const panel = document.getElementById('customPanel'); 
+508:     panel.classList.toggle('active'); 
+509:     document.querySelector('.tab-indicator').style.display = 'none'; 
+510: } 
+511: function updateValue(sliderId) { 
+512:     const slider = document.getElementById(sliderId); 
+513:     const valueSpan = document.getElementById(sliderId + 'Value'); 
+514:     valueSpan.textContent = slider.value; 
+515:      
+516:     if (sliderId === 'laserCost') { 
+517:         laserCost = parseInt(slider.value); 
+518:     } 
+519: } 
+520: function applyChanges() { 
+521:     gameSpeed = parseInt(document.getElementById('gameSpeed').value); 
+522:     PLAYER_SIZE = parseInt(document.getElementById('playerSize').value); 
+523:     laserCost = parseInt(document.getElementById('laserCost').value); 
+524:     let newEnemyCount = parseInt(document.getElementById('enemyCount').value); 
+525:     while (enemies.length < newEnemyCount) enemies.push(createEnemy()); 
+526:     while (enemies.length > newEnemyCount) enemies.pop(); 
+527:      
+528:     statusDiv.textContent = '[OK] Changements appliques '; 
+529:     setTimeout(() => statusDiv.textContent = 'Jouez ', 2000); 
+530: } 
+531: function resetDefaults() { 
+532:     location.reload(); 
+533: } 
+534: function updateShapeColor(shapeIndex, color) { 
+535:     SHAPES[shapeIndex].color = color; 
+536: } 
+537: function updateBackground(color) { 
+538:     canvas.style.background = color; 
+539: } 
+540: function updateBorder(color) { 
+541:     canvas.style.borderColor = color; 
+542: } 
+543: function updatePageBackground(color) { 
+544:     document.body.style.background = color; 
+545: } 
+546: function toggleGodMode(enabled) { 
+547:     godMode = enabled; 
+548: } 
+549: function toggleTurbo(enabled) { 
+550:     turboMode = enabled; 
+551: } 
+552: function toggleUnlockAll(enabled) { 
+553:     if (enabled) { 
+554:         unlockedShapes = [0, 1, 2, 3, 4]; 
+555:         updateShapeButtons(); 
+556:     } else { 
+557:         unlockedShapes = [0]; 
+558:         updateShapeButtons(); 
+559:     } 
+560: } 
+561: function toggleInstructions() { 
+562:     alert('COMMANDES AVANCEES :\n\n' + 
+563:           'Clic : Utiliser le pouvoir (selon la forme)\n' + 
+564:           'Laser : Pointez et cliquez pour tirer (coute energie)\n' + 
+565:           'Dessin : En forme CUBE, maintenez pour tracer une zone\n' + 
+566:           'Pause : Appuyez sur ESPACE\n\n' + 
+567:           'ASTUCE : Tuez 5 ennemis avec le laser pour debloquer le Cube \n' + 
+568:           'Les ennemis respawnent a leurs bases rouges'); 
+569: } 

@@ -1,0 +1,901 @@
+// PLATON'S SHIFTER - VERSION CORRIGÉE & ROBUSTE
+const GRID_SIZE = 40;
+let PLAYER_SIZE = 30;
+const ENEMY_SIZE = 25;
+const ESSENCE_SIZE = 20;
+
+let SHAPES = [
+    { name: "TETRAEDRE", color: "#FF4444", speed: 6, attack: 2, special: "laser" },
+    { name: "CUBE", color: "#D2B48C", speed: 2, attack: 1, special: "drawing" },
+    { name: "OCTAEDRE", color: "#44FF44", speed: 4, attack: 3, special: "doubleJump" },
+    { name: "DODECAEDRE", color: "#FFD700", speed: 3, attack: 4, special: "timeSlow" },
+    { name: "ICOSAEDRE", color: "#FF00FF", speed: 5, attack: 5, special: "blast" }
+];
+
+let canvas = document.getElementById('gameCanvas');
+let ctx = canvas.getContext('2d');
+let player = { x: 400, y: 250, shape: 0, velocity: { x: 0, y: 0 }, energy: 0 };
+let enemies = [];
+let essences = [];
+let terrainZones = [];
+let startBase = null;
+let enemyBases = [];
+let unlockedShapes = [0];
+let currentShape = 0;
+let score = 0;
+let health = 3;
+let keys = {};
+let gameLoop = null;
+let lastTime = 0;
+
+let powerCooldown = 3000;
+let lastPowerUse = 0;
+let isPowerActive = false;
+let powerEffects = [];
+let killsToUnlockCube = 5;
+let enemiesKilledWithLaser = 0;
+let laserCost = 2;
+
+let mouseX = 0;
+let mouseY = 0;
+let isLaserActive = false;
+let isDrawing = false;
+let currentDrawingPoints = [];
+
+// VERIFICATION CRITIQUE : Attendre que le DOM soit chargé
+document.addEventListener('DOMContentLoaded', function() {
+    if (!document.getElementById('gameCanvas')) {
+        alert('ERREUR: Canvas gameCanvas manquant dans le HTML!');
+        return;
+    }
+    init();
+});
+
+function init() {
+    createEnemyBases();
+    player.x = startBase.x;
+    player.y = startBase.y;
+    
+    for (let i = 0; i < 8; i++) enemies.push(createEnemy());
+    for (let i = 0; i < 3; i++) essences.push(createEssence());
+    updateShapeButtons();
+    updateKillsDisplay();
+    updateEnergyDisplay();
+    gameLoop = requestAnimationFrame(update);
+}
+
+function createEnemyBases() {
+    startBase = {
+        x: Math.random() * (canvas.width - GRID_SIZE * 8) + GRID_SIZE * 4,
+        y: Math.random() * (canvas.height - GRID_SIZE * 8) + GRID_SIZE * 4,
+        radius: GRID_SIZE * 2.5
+    };
+
+    for (let i = 0; i < 3; i++) {
+        let base;
+        let validPosition = false;
+        let attempts = 0;
+        while (!validPosition && attempts < 50) {
+            base = {
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                radius: GRID_SIZE * 2
+            };
+            validPosition = true;
+            if (Math.abs(base.x - startBase.x) < GRID_SIZE * 10 && Math.abs(base.y - startBase.y) < GRID_SIZE * 10) validPosition = false;
+            enemyBases.forEach(existingBase => {
+                if (Math.abs(base.x - existingBase.x) < GRID_SIZE * 8 && Math.abs(base.y - existingBase.y) < GRID_SIZE * 8) validPosition = false;
+            });
+            attempts++;
+        }
+        enemyBases.push(base);
+    }
+}
+
+function createEnemy() {
+    const base = enemyBases[Math.floor(Math.random() * enemyBases.length)];
+    const angle = Math.random() * Math.PI * 2;
+    const distance = base.radius + Math.random() * 50;
+    return {
+        x: base.x + Math.cos(angle) * distance,
+        y: base.y + Math.sin(angle) * distance,
+        vx: (Math.random() - 0.5) * 2,
+        vy: (Math.random() - 0.5) * 2,
+        size: ENEMY_SIZE,
+        color: '#FF0000',
+        originalSpeed: 1
+    };
+}
+
+function createEssence() {
+    return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: ESSENCE_SIZE,
+        collected: false,
+        pulsePhase: Math.random() * Math.PI * 2
+    };
+}
+
+function update(timestamp) {
+    if (timestamp - lastTime > 16) {
+        lastTime = timestamp;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        updatePlayer();
+        updateEnemies();
+        updatePowerEffects();
+        drawStartBase();
+        drawEnemyBases();
+        drawLaser();
+        drawDrawingPreview();
+        drawEssences();
+        drawEnemies();
+        drawPowerEffects();
+        drawTerrainZones();
+        drawPlayer();
+        checkCollisions();
+        updatePowerUI();
+    }
+    gameLoop = requestAnimationFrame(update);
+}
+
+function updatePlayer() {
+    let shape = SHAPES[currentShape];
+    let targetVx = 0, targetVy = 0;
+    if (keys['z'] || keys['Z'] || keys['w'] || keys['W'] || keys['ArrowUp']) targetVy = -shape.speed;
+    if (keys['s'] || keys['S'] || keys['ArrowDown']) targetVy = shape.speed;
+    if (keys['q'] || keys['Q'] || keys['a'] || keys['A'] || keys['ArrowLeft']) targetVx = -shape.speed;
+    if (keys['d'] || keys['D'] || keys['ArrowRight']) targetVx = shape.speed;
+
+    if (targetVx !== 0 || targetVy !== 0) {
+        let futureX = player.x + targetVx;
+        let futureY = player.y + targetVy;
+        let canMove = true;
+        terrainZones.forEach(zone => {
+            let currentInside = isPointInPolygon({x: player.x, y: player.y}, zone.points);
+            let futureInside = isPointInPolygon({x: futureX, y: futureY}, zone.points);
+            if (!currentInside && futureInside) canMove = false;
+        });
+        if (canMove) {
+            player.x = futureX;
+            player.y = futureY;
+        }
+    }
+
+    player.x = Math.max(PLAYER_SIZE/2, Math.min(canvas.width - PLAYER_SIZE/2, player.x));
+    player.y = Math.max(PLAYER_SIZE/2, Math.min(canvas.height - PLAYER_SIZE/2, player.y));
+
+    if (keys[' '] && shape.special === 'doubleJump' && !isPowerActive) activateDoubleJump();
+}
+
+function isPointInPolygon(point, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        let xi = polygon[i].x, yi = polygon[i].y;
+        let xj = polygon[j].x, yj = polygon[j].y;
+        let intersect = ((yi > point.y) != (yj > point.y))
+            && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+function drawTerrainZones() {
+    terrainZones.forEach(zone => {
+        if (zone.points.length > 2) {
+            ctx.save();
+            ctx.fillStyle = SHAPES[1].color;
+            ctx.strokeStyle = '#A0A0A0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(zone.points[0].x, zone.points[0].y);
+            for (let i = 1; i < zone.points.length; i++) ctx.lineTo(zone.points[i].x, zone.points[i].y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+    });
+}
+
+function drawStartBase() {
+    if (startBase) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(100, 200, 255, 0.2)';
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(startBase.x, startBase.y, startBase.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#00ffff';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('BASE', startBase.x, startBase.y + 5);
+        ctx.restore();
+    }
+}
+
+function drawEnemyBases() {
+    enemyBases.forEach(base => {
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+        ctx.strokeStyle = '#ff4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(base.x, base.y, base.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#ff4444';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ENNEMI', base.x, base.y + 4);
+        ctx.restore();
+    });
+}
+
+function drawDrawingPreview() {
+    if (isDrawing && currentDrawingPoints.length > 1) {
+        ctx.save();
+        ctx.strokeStyle = '#A0A0A0';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(currentDrawingPoints[0].x, currentDrawingPoints[0].y);
+        for (let i = 1; i < currentDrawingPoints.length; i++) ctx.lineTo(currentDrawingPoints[i].x, currentDrawingPoints[i].y);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+function startDrawing(x, y) {
+    currentDrawingPoints = [{x: x, y: y}];
+    isDrawing = true;
+}
+
+function continueDrawing(x, y) {
+    if (isDrawing) {
+        let lastPoint = currentDrawingPoints[currentDrawingPoints.length - 1];
+        let distance = Math.sqrt((x - lastPoint.x) ** 2 + (y - lastPoint.y) ** 2);
+        if (distance > 10) currentDrawingPoints.push({x: x, y: y});
+    }
+}
+
+function finishDrawing() {
+    if (currentDrawingPoints.length < 3) {
+        statusDiv.textContent = '[ERREUR] Zone trop petite';
+        setTimeout(() => statusDiv.textContent = 'Jouez !', 3000);
+        isDrawing = false;
+        currentDrawingPoints = [];
+        return;
+    }
+
+    let area = 0;
+    for (let i = 0; i < currentDrawingPoints.length - 1; i++) {
+        let j = (i + 1) % currentDrawingPoints.length;
+        area += currentDrawingPoints[i].x * currentDrawingPoints[j].y;
+        area -= currentDrawingPoints[i].y * currentDrawingPoints[j].x;
+    }
+    area = Math.abs(area / 2);
+
+    if (area < 1000) {
+        statusDiv.textContent = '[ERREUR] Surface min: 1000';
+        setTimeout(() => statusDiv.textContent = 'Jouez !', 3000);
+        isDrawing = false;
+        currentDrawingPoints = [];
+        return;
+    }
+
+    terrainZones.push({ points: [...currentDrawingPoints], area: area });
+    currentDrawingPoints = [];
+    isDrawing = false;
+    statusDiv.textContent = `[OK] Zone creee ! Surface: ${Math.floor(area)}`;
+    setTimeout(() => statusDiv.textContent = 'Jouez !', 3000);
+    lastPowerUse = Date.now();
+    isPowerActive = true;
+    setTimeout(() => { isPowerActive = false; }, getPowerDuration());
+}
+
+function activatePower() {
+    if (isPowerActive) return;
+    
+    let now = Date.now();
+    let timeSinceLastUse = now - lastPowerUse;
+    if (timeSinceLastUse < powerCooldown) return;
+
+    let shape = SHAPES[currentShape];
+    switch(shape.special) {
+        case 'laser': activateLaser(); break;
+        case 'drawing': break;
+        case 'doubleJump': activateDoubleJump(); break;
+        case 'timeSlow': activateTimeSlow(); break;
+        case 'blast': activateBlast(); break;
+    }
+}
+
+function activateLaser() {
+    const cost = laserCost;
+    if (player.energy < cost) {
+        statusDiv.textContent = `[ERREUR] Energie insuffisante ! ${cost} requise`;
+        setTimeout(() => statusDiv.textContent = 'Jouez !', 3000);
+        return;
+    }
+    
+    player.energy -= cost;
+    updateEnergyDisplay();
+    isLaserActive = true;
+    powerEffects.push({ type: 'laserCharge', x: player.x, y: player.y, duration: 200, startTime: Date.now() });
+    setTimeout(() => isLaserActive = false, 500);
+    lastPowerUse = Date.now();
+    isPowerActive = true;
+    setTimeout(() => { isPowerActive = false; }, getPowerDuration());
+}
+
+function drawLaser() {
+    if (isLaserActive) {
+        ctx.save();
+        ctx.strokeStyle = '#FF4444';
+        ctx.lineWidth = 4;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#FF4444';
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y);
+        ctx.lineTo(mouseX, mouseY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(mouseX, mouseY, 10, 0, Math.PI * 2);
+        ctx.fillStyle = '#FF4444';
+        ctx.fill();
+        ctx.restore();
+        checkLaserCollision();
+    }
+}
+
+function checkLaserCollision() {
+    enemies.forEach((enemy, index) => {
+        let A = mouseX - player.x;
+        let B = mouseY - player.y;
+        let C = enemy.x - player.x;
+        let D = enemy.y - player.y;
+        let dot = A * C + B * D;
+        let lenSq = A * A + B * B;
+        let param = lenSq !== 0 ? dot / lenSq : -1;
+        let closestX = param < 0 ? player.x : param > 1 ? mouseX : player.x + param * A;
+        let closestY = param < 0 ? player.y : param > 1 ? mouseY : player.y + param * B;
+        let dx = enemy.x - closestX;
+        let dy = enemy.y - closestY;
+        let distance = Math.sqrt(dx*dx + dy*dy);
+        
+        if (distance < enemy.size) {
+            enemies.splice(index, 1);
+            score += 100;
+            document.getElementById('score').textContent = score;
+            if (currentShape === 0) {
+                enemiesKilledWithLaser++;
+                updateKillsDisplay();
+                if (enemiesKilledWithLaser >= killsToUnlockCube && !unlockedShapes.includes(1)) {
+                    unlockedShapes.push(1);
+                    updateShapeButtons();
+                    statusDiv.textContent = '[OK] CUBE DEBLOQUE !';
+                    setTimeout(() => statusDiv.textContent = 'Jouez !', 4000);
+                }
+            }
+        }
+    });
+}
+
+function activateDoubleJump() {
+    player.y -= 100;
+    powerEffects.push({ type: 'doubleJump', x: player.x, y: player.y + 50, duration: 500, startTime: Date.now() });
+    lastPowerUse = Date.now();
+    isPowerActive = true;
+    setTimeout(() => { isPowerActive = false; }, getPowerDuration());
+}
+
+function activateTimeSlow() {
+    enemies.forEach(enemy => { enemy.vx *= 0.3; enemy.vy *= 0.3; });
+    powerEffects.push({ type: 'timeSlow', x: canvas.width/2, y: canvas.height/2, duration: 3000, startTime: Date.now() });
+    lastPowerUse = Date.now();
+    isPowerActive = true;
+    setTimeout(() => { isPowerActive = false; deactivatePowerEffects(); }, getPowerDuration());
+}
+
+function activateBlast() {
+    let blastRadius = 150;
+    let enemiesDestroyed = 0;
+    enemies.forEach((enemy, index) => {
+        let dx = player.x - enemy.x;
+        let dy = player.y - enemy.y;
+        let distance = Math.sqrt(dx*dx + dy*dy);
+        if (distance < blastRadius) {
+            enemy.x = Math.random() * canvas.width;
+            enemy.y = Math.random() * canvas.height;
+            enemiesDestroyed++;
+            score += 50 * enemiesDestroyed;
+            document.getElementById('score').textContent = score;
+        }
+    });
+    powerEffects.push({ type: 'blast', x: player.x, y: player.y, duration: 500, startTime: Date.now(), radius: blastRadius });
+    lastPowerUse = Date.now();
+    isPowerActive = true;
+    setTimeout(() => { isPowerActive = false; }, getPowerDuration());
+}
+
+function deactivatePowerEffects() {
+    if (SHAPES[currentShape].special === 'timeSlow') {
+        enemies.forEach(enemy => {
+            enemy.vx = (Math.random() - 0.5) * 2;
+            enemy.vy = (Math.random() - 0.5) * 2;
+        });
+    }
+}
+
+function updatePowerEffects() {
+    powerEffects = powerEffects.filter(effect => Date.now() - effect.startTime < effect.duration);
+}
+
+function drawPowerEffects() {
+    powerEffects.forEach(effect => {
+        let elapsed = Date.now() - effect.startTime;
+        let progress = elapsed / effect.duration;
+        ctx.save();
+        switch(effect.type) {
+            case 'laserCharge':
+                ctx.strokeStyle = '#FF4444';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(effect.x, effect.y, PLAYER_SIZE * (1 + progress), 0, Math.PI * 2);
+                ctx.stroke();
+                break;
+            case 'doubleJump':
+                ctx.fillStyle = `rgba(68, 255, 68, ${1 - progress})`;
+                ctx.fillRect(effect.x - 20, effect.y - 20, 40, 40);
+                break;
+            case 'timeSlow':
+                ctx.fillStyle = `rgba(255, 215, 0, ${0.1 * (1 - progress)})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                break;
+            case 'blast':
+                ctx.strokeStyle = '#FF00FF';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(effect.x, effect.y, effect.radius * progress, 0, Math.PI * 2);
+                ctx.stroke();
+                break;
+        }
+        ctx.restore();
+    });
+}
+
+function updatePowerUI() {
+    let now = Date.now();
+    let timeSinceLastUse = now - lastPowerUse;
+    let cooldownProgress = Math.min(timeSinceLastUse / powerCooldown, 1);
+    let cooldownBar = document.getElementById('powerCooldown');
+    let powerStatus = document.getElementById('powerStatus');
+    
+    if (isPowerActive) {
+        if (cooldownBar) cooldownBar.style.width = '100%';
+        if (cooldownBar) cooldownBar.classList.add('active');
+        if (powerStatus) powerStatus.textContent = `[POUVOIR] ${SHAPES[currentShape].special} ACTIF !`;
+    } else if (cooldownProgress < 1) {
+        if (cooldownBar) cooldownBar.style.width = `${cooldownProgress * 100}%`;
+        if (cooldownBar) cooldownBar.classList.remove('active');
+        if (powerStatus) powerStatus.textContent = `[RECHARGEMENT] (${Math.ceil((powerCooldown - timeSinceLastUse) / 1000)}s)`;
+    } else {
+        if (cooldownBar) cooldownBar.style.width = '100%';
+        if (cooldownBar) cooldownBar.classList.add('active');
+        if (powerStatus) powerStatus.textContent = `[CLIC] ${SHAPES[currentShape].special.toUpperCase()}`;
+    }
+}
+
+function updateKillsDisplay() {
+    let killsDiv = document.getElementById('killsDisplay');
+    if (killsDiv) {
+        if (unlockedShapes.includes(1)) {
+            killsDiv.textContent = `Kills: ${enemiesKilledWithLaser} [OK]`;
+        } else {
+            killsDiv.textContent = `Kills: ${enemiesKilledWithLaser}/${killsToUnlockCube} [VERROU]`;
+        }
+    }
+}
+
+function getPowerDuration() {
+    switch(SHAPES[currentShape].special) {
+        case 'laser': return 500;
+        case 'drawing': return 500;
+        case 'doubleJump': return 500;
+        case 'timeSlow': return 3000;
+        case 'blast': return 500;
+        default: return 1000;
+    }
+}
+
+
+// Formes centrees
+function drawPlayer() {
+    let shape = SHAPES[currentShape];
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.fillStyle = shape.color;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+
+    switch(currentShape) {
+        case 0: // Tetraedre
+            drawTriangle(0, 0, PLAYER_SIZE);
+            break;
+        case 1: // Cube
+            ctx.fillRect(-PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
+            ctx.strokeRect(-PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
+            break;
+        case 2: // Octaedre
+            drawDiamond(0, 0, PLAYER_SIZE);
+            break;
+        case 3: // Dodecaedre
+            drawPentagon(0, 0, PLAYER_SIZE/2);
+            break;
+        case 4: // Icosaedre
+            drawIcosahedron(0, 0, PLAYER_SIZE/2);
+            break;
+    }
+    ctx.restore();
+}
+
+function drawTriangle(x, y, size) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - size/2);
+    ctx.lineTo(x - size/2, y + size/2);
+    ctx.lineTo(x + size/2, y + size/2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+}
+
+function drawDiamond(x, y, size) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - size/2);
+    ctx.lineTo(x + size/2, y);
+    ctx.lineTo(x, y + size/2);
+    ctx.lineTo(x - size/2, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+}
+
+function drawPentagon(x, y, radius) {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+        let angle = (i * 2 * Math.PI) / 5 - Math.PI / 2;
+        let px = x + radius * Math.cos(angle);
+        let py = y + radius * Math.sin(angle);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+}
+
+function drawIcosahedron(x, y, radius) {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    for (let i = 0; i < 5; i++) {
+        let angle = (i * 2 * Math.PI) / 5;
+        let px = x + radius * 1.5 * Math.cos(angle);
+        let py = y + radius * 1.5 * Math.sin(angle);
+        ctx.beginPath();
+        ctx.arc(px, py, radius/3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+    }
+}
+
+// Spheres d'energie
+function drawEssences() {
+    essences.forEach((essence, index) => {
+        if (!essence.collected) {
+            ctx.save();
+            ctx.translate(essence.x, essence.y);
+            
+            let pulse = Math.sin(Date.now() * 0.003 + essence.pulsePhase) * 0.3 + 0.7;
+            let currentSize = essence.size * pulse;
+            
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#00ffff';
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, currentSize, 0, Math.PI * 2);
+            ctx.fillStyle = '#00ffff';
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, currentSize * 0.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            
+            ctx.restore();
+        }
+    });
+}
+
+// Mise a jour des ennemis (avec collision sur terrain)
+function updateEnemies() {
+    enemies.forEach(enemy => {
+        let futureX = enemy.x + enemy.vx;
+        let futureY = enemy.y + enemy.vy;
+        
+        // Verifier collision avec le terrain (zones)
+        let hitTerrain = false;
+        terrainZones.forEach(zone => {
+            let currentInside = isPointInPolygon({x: enemy.x, y: enemy.y}, zone.points);
+            let futureInside = isPointInPolygon({x: futureX, y: futureY}, zone.points);
+            
+            if (!currentInside && futureInside) {
+                hitTerrain = true;
+            }
+        });
+        
+        if (hitTerrain) {
+            enemy.vx *= -1;
+            enemy.vy *= -1;
+            enemy.x += enemy.vx * 2;
+            enemy.y += enemy.vy * 2;
+        } else {
+            enemy.x += enemy.vx;
+            enemy.y += enemy.vy;
+            
+            if (enemy.x <= enemy.size/2 || enemy.x >= canvas.width - enemy.size/2) enemy.vx *= -1;
+            if (enemy.y <= enemy.size/2 || enemy.y >= canvas.height - enemy.size/2) enemy.vy *= -1;
+        }
+    });
+}
+
+function drawEnemies() {
+    enemies.forEach(enemy => {
+        ctx.fillStyle = enemy.color;
+        ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y, enemy.size/2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(enemy.x - enemy.size/4, enemy.y);
+        ctx.lineTo(enemy.x + enemy.size/4, enemy.y);
+        ctx.moveTo(enemy.x, enemy.y - enemy.size/4);
+        ctx.lineTo(enemy.x, enemy.y + enemy.size/4);
+        ctx.stroke();
+    });
+}
+
+// Verifier les collisions
+function checkCollisions() {
+    // Collisions avec les spheres d'energie
+    essences.forEach((essence, index) => {
+        if (!essence.collected) {
+            let dx = player.x - essence.x;
+            let dy = player.y - essence.y;
+            let distance = Math.sqrt(dx*dx + dy*dy);
+            if (distance < (PLAYER_SIZE + essence.size) / 2) {
+                essence.collected = true;
+                player.energy += 5;
+                score += 50;
+                document.getElementById('score').textContent = score;
+                updateEnergyDisplay();
+                setTimeout(() => { essences[index] = createEssence(); }, 2000);
+            }
+        }
+    });
+    
+    // Collisions avec les ennemis
+    enemies.forEach((enemy, index) => {
+        let dx = player.x - enemy.x;
+        let dy = player.y - enemy.y;
+        let distance = Math.sqrt(dx*dx + dy*dy);
+        
+        if (distance < (PLAYER_SIZE + enemy.size) / 2) {
+            if (!isPowerActive || SHAPES[currentShape].special !== 'shield') {
+                health--;
+                updateHealthDisplay();
+                enemy.x = Math.random() * canvas.width;
+                enemy.y = Math.random() * canvas.height;
+                if (health <= 0) gameOver();
+            }
+        }
+    });
+}
+
+function updateHealthDisplay() {
+    let healthText = '';
+    for (let i = 0; i < health; i++) healthText += '[COEUR]';
+    document.getElementById('health').textContent = healthText || '[MORT]';
+}
+
+function updateEnergyDisplay() {
+    document.getElementById('energy').textContent = player.energy;
+}
+
+function updateKillsDisplay() {
+    let killsDiv = document.getElementById('killsDisplay');
+    if (unlockedShapes.includes(1)) {
+        killsDiv.textContent = `Kills: ${enemiesKilledWithLaser} [OK]`;
+    } else {
+        killsDiv.textContent = `Kills: ${enemiesKilledWithLaser}/${killsToUnlockCube} [VERROU]`;
+    }
+}
+
+function updateShapeButtons() {
+    document.querySelectorAll('.shape-btn').forEach((btn, index) => {
+        btn.classList.toggle('locked', !unlockedShapes.includes(index));
+        btn.classList.toggle('active', index === currentShape);
+    });
+    document.getElementById('currentForm').textContent = `FORME: ${SHAPES[currentShape].name}`;
+    updateKillsDisplay();
+}
+
+function changeShape(shapeIndex) {
+    if (unlockedShapes.includes(shapeIndex)) {
+        currentShape = shapeIndex;
+        updateShapeButtons();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+}
+
+function gameOver() {
+    cancelAnimationFrame(gameLoop);
+    document.getElementById('finalScore').textContent = score;
+    document.getElementById('finalEnergy').textContent = player.energy;
+    document.getElementById('finalBlocks').textContent = terrainZones.length;
+    document.getElementById('gameOver').style.display = 'block';
+}
+
+function restartGame() {
+    location.reload();
+}
+
+// GESTIONNAIRE GLOBAL DE CLIC
+canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Mode dessin (Cube)
+    if (currentShape === 1 && unlockedShapes.includes(1)) {
+        startDrawing(x, y);
+    } else {
+        // Autres pouvoirs
+        mouseX = x;
+        mouseY = y;
+        activatePower();
+    }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+    
+    if (isDrawing) {
+        continueDrawing(mouseX, mouseY);
+    }
+});
+
+canvas.addEventListener('mouseup', () => {
+    if (isDrawing) {
+        finishDrawing();
+    }
+});
+
+// Gestion du clavier
+document.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+    if (e.key >= '1' && e.key <= '5') changeShape(parseInt(e.key) - 1);
+    if (e.key === 'Tab') { e.preventDefault(); toggleCustomizationPanel(); }
+});
+
+document.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+// Personnalisation
+function toggleCustomizationPanel() {
+    const panel = document.getElementById('customPanel');
+    panel.classList.toggle('active');
+    document.querySelector('.tab-indicator').style.display = 'none';
+}
+
+function updateValue(sliderId) {
+    const slider = document.getElementById(sliderId);
+    const valueSpan = document.getElementById(sliderId + 'Value');
+    valueSpan.textContent = slider.value;
+    
+    if (sliderId === 'laserCost') {
+        laserCost = parseInt(slider.value);
+    }
+}
+
+function applyChanges() {
+    gameSpeed = parseInt(document.getElementById('gameSpeed').value);
+    PLAYER_SIZE = parseInt(document.getElementById('playerSize').value);
+    laserCost = parseInt(document.getElementById('laserCost').value);
+    let newEnemyCount = parseInt(document.getElementById('enemyCount').value);
+    while (enemies.length < newEnemyCount) enemies.push(createEnemy());
+    while (enemies.length > newEnemyCount) enemies.pop();
+    
+    statusDiv.className = 'status success';
+    statusDiv.textContent = '[OK] Changements appliques !';
+    setTimeout(() => {
+        statusDiv.className = 'status info';
+        statusDiv.textContent = 'Jouez !';
+    }, 2000);
+}
+
+function resetDefaults() {
+    location.reload();
+}
+
+function updateShapeColor(shapeIndex, color) {
+    SHAPES[shapeIndex].color = color;
+}
+
+function updateBackground(color) {
+    canvas.style.background = color;
+}
+
+function updateBorder(color) {
+    canvas.style.borderColor = color;
+}
+
+function updatePageBackground(color) {
+    document.body.style.background = color;
+}
+
+function toggleGodMode(enabled) {
+    godMode = enabled;
+}
+
+function toggleTurbo(enabled) {
+    turboMode = enabled;
+}
+
+function toggleUnlockAll(enabled) {
+    if (enabled) {
+        unlockedShapes = [0, 1, 2, 3, 4];
+        updateShapeButtons();
+    } else {
+        unlockedShapes = [0];
+        updateShapeButtons();
+    }
+}
+
+function toggleInstructions() {
+    alert('COMMANDES AVANCEES :\n\n' +
+          'Clic : Utiliser le pouvoir (selon la forme)\n' +
+          'Laser : Pointez et cliquez pour tirer (coute energie)\n' +
+          'Dessin : En forme CUBE, maintenez pour tracer une zone\n' +
+          'Pause : Appuyez sur ESPACE\n\n' +
+          'ASTUCE : Tuez 5 ennemis avec le laser pour debloquer le Cube !\n' +
+          'Les ennemis respawnent a leurs bases rouges');
+}
+
+// Initialisation du DOM
+const statusDiv = document.createElement('div');
+statusDiv.className = 'status info';
+statusDiv.textContent = 'Jouez !';
+statusDiv.style.marginTop = '10px';
+document.querySelector('.main-panel').appendChild(statusDiv);
+
+// Initialisation du compteur de kills
+const killsDiv = document.getElementById('killsDisplay');
+
+// Demarrer le jeu
+init();
+// CORRECT_TAILLE_BASES
+
+// CORRECT_BASE_UNIQUE
+
+// CORRECT_STYLE
+
+// CORRECT_RESPAWN

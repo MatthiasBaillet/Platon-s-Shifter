@@ -1,0 +1,63 @@
+======================================================================
+🔍 TOUS LES ENDROITS OÙ 'enemy' APPARAÎT
+======================================================================
+
+LIGNE   5: const ENEMY_SIZE = 25;
+LIGNE  23: let enemyBases = [];
+LIGNE  56:     createEnemyBases();
+LIGNE  60:     for (let i = 0; i < 8; i++) enemies.push(createEnemy());
+LIGNE  68: function createEnemyBases() {
+LIGNE  87:             enemyBases.forEach(existingBase => {
+LIGNE  92:         enemyBases.push(base);
+LIGNE  96: function createEnemy() {
+LIGNE  97:     const base = enemyBase; // ✅ UNIQUEMENT CETTE LIGNE
+LIGNE 105:         size: ENEMY_SIZE,
+LIGNE 131:         drawEnemyBases();
+LIGNE 222: function drawEnemyBases() {
+LIGNE 223:     enemyBases.forEach(base => {
+LIGNE 358:     enemies.forEach((enemy, index) => {
+LIGNE 361:         let C = enemy.x - player.x;
+LIGNE 362:         let D = enemy.y - player.y;
+LIGNE 368:         let dx = enemy.x - closestX;
+LIGNE 369:         let dy = enemy.y - closestY;
+LIGNE 372:         if (distance < enemy.size) {
+LIGNE 399:     enemies.forEach(enemy => { enemy.vx *= 0.3; enemy.vy *= 0.3; });
+LIGNE 409:     enemies.forEach((enemy, index) => {
+LIGNE 410:         let dx = player.x - enemy.x;
+LIGNE 411:         let dy = player.y - enemy.y;
+LIGNE 414:             enemy.x = Math.random() * canvas.width;
+LIGNE 415:             enemy.y = Math.random() * canvas.height;
+LIGNE 429:         enemies.forEach(enemy => {
+LIGNE 430:             enemy.vx = (Math.random() - 0.5) * 2;
+LIGNE 431:             enemy.vy = (Math.random() - 0.5) * 2;
+LIGNE 628:     enemies.forEach(enemy => {
+LIGNE 629:         let futureX = enemy.x + enemy.vx;
+LIGNE 630:         let futureY = enemy.y + enemy.vy;
+LIGNE 635:             let currentInside = isPointInPolygon({x: enemy.x, y: enemy.y}, zone.points);
+LIGNE 644:             enemy.vx *= -1;
+LIGNE 645:             enemy.vy *= -1;
+LIGNE 646:             enemy.x += enemy.vx * 2;
+LIGNE 647:             enemy.y += enemy.vy * 2;
+LIGNE 649:             enemy.x += enemy.vx;
+LIGNE 650:             enemy.y += enemy.vy;
+LIGNE 652:             if (enemy.x <= enemy.size/2 || enemy.x >= canvas.width - enemy.size/2) enemy.vx *= -1;
+LIGNE 653:             if (enemy.y <= enemy.size/2 || enemy.y >= canvas.height - enemy.size/2) enemy.vy *= -1;
+LIGNE 659:     enemies.forEach(enemy => {
+LIGNE 660:         ctx.fillStyle = enemy.color;
+LIGNE 662:         ctx.arc(enemy.x, enemy.y, enemy.size/2, 0, Math.PI * 2);
+LIGNE 667:         ctx.moveTo(enemy.x - enemy.size/4, enemy.y);
+LIGNE 668:         ctx.lineTo(enemy.x + enemy.size/4, enemy.y);
+LIGNE 669:         ctx.moveTo(enemy.x, enemy.y - enemy.size/4);
+LIGNE 670:         ctx.lineTo(enemy.x, enemy.y + enemy.size/4);
+LIGNE 695:     enemies.forEach((enemy, index) => {
+LIGNE 696:         let dx = player.x - enemy.x;
+LIGNE 697:         let dy = player.y - enemy.y;
+LIGNE 700:         if (distance < (PLAYER_SIZE + enemy.size) / 2) {
+LIGNE 704:                 enemy.x = Math.random() * canvas.width;
+LIGNE 705:                 enemy.y = Math.random() * canvas.height;
+LIGNE 824:     let newEnemyCount = parseInt(document.getElementById('enemyCount').value);
+LIGNE 825:     while (enemies.length < newEnemyCount) enemies.push(createEnemy());
+LIGNE 826:     while (enemies.length > newEnemyCount) enemies.pop();
+
+======================================================================
+📌 Recherchez 'enemyBases' ou 'enemyBase'

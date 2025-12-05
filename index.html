@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Platon's Shifter V4.2</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #0a0a0a; color: white; font-family: Arial; }
+        #gameCanvas { border: 3px solid #8a2be2; background: #000; cursor: crosshair; display: block; margin: 0 auto; }
+        .hud { text-align: center; padding: 10px; }
+        .shape-btn { display: inline-block; padding: 10px; margin: 5px; border: 2px solid #444; cursor: pointer; }
+        .shape-btn.active { border-color: #ff00ff; }
+        .shape-btn.locked { opacity: 0.3; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center;">🔷 PLATON'S SHIFTER V4.2 🔷</h1>
+    <div class="hud">
+        <span>Score: <span id="score">0</span></span> | 
+        <span>Énergie: <span id="energy">0</span></span> | 
+        <span>Vie: <span id="health">❤️❤️❤️</span></span> | 
+        <span>Kills: <span id="killsDisplay">0/5 🔒</span></span>
+    </div>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div style="text-align: center; margin-top: 10px;">
+        <div class="shape-btn active" data-shape="0">🔺 TÉTRAÈDRE (Laser)</div>
+        <div class="shape-btn locked" data-shape="1">⬜ CUBE (Dessin)</div>
+        <div class="shape-btn locked" data-shape="2">🔶 OCTAÈDRE (Double saut)</div>
+        <div class="shape-btn locked" data-shape="3">⬟ DODÉCAÈDRE (Ralentir)</div>
+        <div class="shape-btn locked" data-shape="4">🔵 ICOSAÈDRE (Explosion)</div>
+    </div>
+    <div style="max-width: 800px; margin: 20px auto; font-size: 14px;">
+        <strong>🎮 Commandes :</strong> ZQSD/WASD/Flèches (déplacer) | 1-5 (changer forme) | Clic gauche (pouvoir) | Espace (Octaèdre: double saut)
+    </div>
+    
+    <script src="Game.js"></script>
+    <script>
+        // Liaison boutons formes
+        document.querySelectorAll('.shape-btn').forEach(btn => {
+            btn.onclick = () => {
+                const shapeIndex = parseInt(btn.dataset.shape);
+                if (window.unlockedShapes && window.unlockedShapes.includes(shapeIndex)) {
+                    window.currentShape = shapeIndex;
+                    document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                }
+            };
+        });
+    </script>
+</body>
+</html>

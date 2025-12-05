@@ -1,0 +1,188 @@
+================================================================================
+PLATON'S SHIFTER - DOCUMENTATION COMPLETE
+Projet : Correcteur Automatique + Jeu
+Date de création : 2025-12-05
+Version : 2.3 (Stable)
+================================================================================
+
+================================================================================
+1. RÉSUMÉ DU JEU "PLATON'S SHIFTER"
+================================================================================
+
+DESCRIPTION GÉNÉRALE :
+Platon's Shifter est un jeu d'action-arcade basé sur les 5 solides platoniciens.
+Le joueur contrôle un personnage géométrique qui peut changer de forme, chaque
+forme ayant des capacités spéciales uniques. Le but est de collecter de l'énergie,
+combattre des ennemis et survivre le plus longtemps possible.
+
+MÉCANIQUES DE JEU :
+- Déplacement : ZQSD / WASD / Flèches directionnelles
+- Changement de forme : Touches 1 à 5 (débloquées progressivement)
+- Pouvoir spécial : Clic gauche (diffère selon la forme)
+- Système d'énergie : Consommé pour utiliser les pouvoirs
+- Système de score : Gagné en tuant des ennemis et collectant des sphères
+
+LES 5 FORMES :
+1. Tétraèdre (Rouge) : Tir laser (coûte 2 énergie)
+2. Cube (Beige) : Dessin de terrain bloquant (maintenir clic)
+3. Octaèdre (Vert) : Double saut (espace)
+4. Dodécaèdre (Or) : Ralentissement du temps
+5. Icosaèdre (Magenta) : Explosion de zone
+
+OBJECTIF :
+Débloquer toutes les formes en progressant (le Cube se débloque après 5 kills
+avec le laser), collecter l'énergie, construire des défenses, et survivre.
+
+================================================================================
+2. RÉSUMÉ DU WORKFLOW DE PRODUCTION
+================================================================================
+
+Ce projet utilise un workflow en 2 phases : CORRECTION puis TEST.
+
+STRUCTURE DES FICHIERS :
+------------------------
+📁 Dossier projet/
+   ├── launcher.bat         # Lanceur graphique pour Windows
+   ├── fix_game_v2.py       # Correcteur automatique du code JavaScript
+   ├── Game.js              # Code source du jeu (JavaScript pur)
+   └── index.html           # Page HTML qui charge et affiche le jeu
+
+PHASE 1 : CORRECTION (Automatisée)
+----------------------------------
+Fichier utilisé : fix_game_v2.py
+Fichier cible   : Game.js
+
+Objectif : Appliquer automatiquement 5 corrections de bugs/améliorations :
+1. Réduire la taille des bases (2.5 → 1.5)
+2. Passer à une seule base ennemie (au lieu de 3)
+3. Supprimer le texte "BASE" affiché à l'écran
+4. Corriger le respawn des ennemis (ajout setTimeout)
+5. Uniformiser le style graphique
+
+Commande d'exécution :
+   python fix_game_v2.py Game.js
+
+Résultat : Crée Game_fixed.js + une backup .backup
+
+PHASE 2 : TEST (Manuel)
+-----------------------
+Fichier utilisé : index.html
+Fichier chargé  : Game.js
+
+Objectif : Tester le jeu corrigé dans le navigateur
+
+Commande d'exécution :
+   Double-clic sur index.html
+
+OUVRIR LA CONSOLE DEBUG (Chrome) :
+   F12 → Onglet Console
+
+================================================================================
+3. DESCRIPTION DES FICHIERS
+================================================================================
+
+🔧 fix_game_v2.py
+   - Langage : Python 3
+   - Dépendances : esprima (pip install esprima)
+   - Fonction : Analyse Game.js, détecte des patterns de bugs, applique des
+     corrections par expression rationnelle, valide la syntaxe avec Node.js
+   - Options : --dry-run (simulation), --force (forcer), --no-backup
+   - Sortie : Game_fixed.js + .backup
+
+🚀 launcher.bat
+   - Langage : Batch (Windows)
+   - Fonction : Interface graphique simple pour lancer les commandes
+   - Actions : Test Python, vérifie Game.js, installe esprima, propose menu
+   - Menu : 1=Corriger, 2=Simuler, 3=Quitter
+   - Utilisation : Double-clic dans l'Explorateur Windows
+
+🎮 Game.js
+   - Langage : JavaScript pur (ES6)
+   - Taille : ~1800 lignes
+   - Contenu : Logique complète du jeu (variables, fonctions, boucle de jeu)
+   - Dépendances : Aucune (vanilla JS)
+   - Format : Encodage ANSI ou UTF-8 sans BOM
+
+🌐 index.html
+   - Langage : HTML5 + CSS3
+   - Fonction : Conteneur pour charger et afficher le jeu
+   - Structure : Canvas 800x500 + HUD minimaliste + styles CSS
+   - Chargement : <script src="Game.js"></script> à la fin du body
+
+================================================================================
+4. PROCÉDURE D'UTILISATION (Pour un nouvel utilisateur)
+================================================================================
+
+ÉTAPE 0 : PRÉPARATION
+   - Placer TOUS les fichiers dans un même dossier
+   - S'assurer que Python 3 est installé et accessible dans PATH
+   - S'assurer que Node.js est installé (optionnel mais recommandé)
+
+ÉTAPE 1 : INSTALLATION DES DÉPENDANCES
+   Ouvrir CMD dans le dossier :
+      python -m pip install esprima
+
+ÉTAPE 2 : LANCER LA CORRECTION
+   Option A (Graphique) :
+      Double-clic sur launcher.bat → Choisir 2 (SIMULATION) → Puis 1 (CORRIGER)
+   
+   Option B (Manuelle) :
+      python fix_game_v2.py Game.js
+
+ÉTAPE 3 : APPLIQUER LES CORRECTIONS
+   - Renommer Game_fixed.js en Game.js (écraser l'ancien)
+   - Conserver Game_fixed.js.backup comme sauvegarde
+
+ÉTAPE 4 : TESTER LE JEU
+   Double-clic sur index.html
+   Le jeu doit s'ouvrir dans Chrome avec les corrections appliquées
+
+================================================================================
+5. NOTES IMPORTANTES POUR L'UTILISATEUR/AI FUTUR
+================================================================================
+
+🚨 POINTS CRITIQUES :
+   - Game.js doit être encodé en ANSI ou UTF-8 sans BOM
+   - index.html doit contenir TOUS les IDs référencés dans Game.js
+   - Le launcher.bat doit être encodé en ANSI (pas UTF-8 avec BOM)
+   - Toujours tester avec --dry-run avant d'appliquer les corrections
+
+🔧 DÉBOGAGE :
+   - Si écran noir : Vérifier la console Chrome (F12) pour les erreurs
+   - Erreur "enemyBases is not defined" : Game.js corrompu ou incomplet
+   - Erreur "Cannot set properties of null" : ID manquant dans index.html
+   - Si le jeu ne répond pas : Vérifier que le canvas a bien id="gameCanvas"
+
+💡 ASTUCES :
+   - Pour revenir à la version originale : Copier Game_fixed.js.backup vers Game.js
+   - Pour modifier les corrections : Éditer fix_game_v2.py (section CORRECTIONS)
+   - Pour ajouter de nouvelles fonctionnalités : Modifier Game.js directement
+
+================================================================================
+6. RÉSUMÉ ULTRA-RAPIDE POUR UNE AUTRE PERSONNE/AI
+================================================================================
+
+JEU : Action-arcade avec 5 formes géométriques (solides platoniciens), chacune 
+avec un pouvoir unique. But : survivre, collecter de l'énergie, débloquer les
+formes, et atteindre un score élevé.
+
+WORKFLOW :
+1. `launcher.bat` → vérifie l'environnement → propose un menu graphique
+2. `fix_game_v2.py Game.js` → corrige automatiquement 5 bugs → crée Game_fixed.js
+3. Renommer `Game_fixed.js` → `Game.js` (remplacer l'original)
+4. `index.html` → charge le jeu → test dans navigateur (Chrome recommandé)
+
+FICHIERS :
+- `.bat` : Lanceur Windows (interface utilisateur)
+- `.py` : Correcteur automatique (logique de patch)
+- `Game.js` : Code du jeu (JavaScript)
+- `index.html` : Page de test (HTML+CSS)
+
+COMMANDES CLÉS :
+- `python fix_game_v2.py Game.js --dry-run` : Tester sans appliquer
+- `python fix_game_v2.py Game.js` : Appliquer les corrections
+- Double-clic sur `index.html` : Jouer au jeu
+
+================================================================================
+FIN DE LA DOCUMENTATION
+================================================================================

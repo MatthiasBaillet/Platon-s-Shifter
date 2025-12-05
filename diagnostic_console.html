@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>DIAGNOSTIC - Platon's Shifter</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #1a1a1a; color: #fff; font-family: monospace; }
+        #errorLog { 
+            background: #000; color: #ff4444; padding: 20px; border: 2px solid #ff4444;
+            margin: 20px 0; white-space: pre-wrap; min-height: 200px;
+            font-family: 'Courier New', monospace;
+        }
+        #gameCanvas { border: 3px solid #00ff00; display: block; margin: 20px auto; }
+        canvas { display: none; } /* Caché si erreur */
+    </style>
+</head>
+<body>
+    <h1>🔍 DIAGNOSTIC PLATON'S SHIFTER</h1>
+    <div id="errorLog">En attente de l'initialisation...</div>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    
+    <script>
+        // CAPTURE TOUTES LES ERREURS
+        window.onerror = function(msg, url, line, col, error) {
+            const errorDiv = document.getElementById('errorLog');
+            errorDiv.innerHTML += `\n[ERREUR FATALE]\nMessage: ${msg}\nLigne: ${line}\nColonne: ${col}\nStack: ${error ? error.stack : 'N/A'}\n`;
+            errorDiv.style.display = 'block';
+        };
+        
+        // CAPTURE LES CONSOLE.LOG
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            const errorDiv = document.getElementById('errorLog');
+            errorDiv.innerHTML += `\n[LOG] ${args.join(' ')}`;
+        };
+        
+        // CAPTURE LES ERREURS DE PROMESSES
+        window.addEventListener('unhandledrejection', function(event) {
+            const errorDiv = document.getElementById('errorLog');
+            errorDiv.innerHTML += `\n[ERREUR PROMESSE] ${event.reason}`;
+            errorDiv.style.display = 'block';
+        });
+        
+        console.log("Diagnostic démarré...");
+        console.log("Canvas trouvé:", document.getElementById('gameCanvas'));
+    </script>
+    <script src="Game.js"></script>
+</body>
+</html>
